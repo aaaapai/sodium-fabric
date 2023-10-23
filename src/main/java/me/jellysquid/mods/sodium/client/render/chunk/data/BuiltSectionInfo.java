@@ -104,7 +104,6 @@ public class BuiltSectionInfo {
 
         BuiltSectionInfo.Builder meshInfo = new BuiltSectionInfo.Builder();
         meshInfo.setOcclusionData(occlusionData);
-
         return meshInfo.build();
     }
 

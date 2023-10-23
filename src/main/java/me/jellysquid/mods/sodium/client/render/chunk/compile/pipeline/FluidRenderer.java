@@ -14,6 +14,7 @@ import me.jellysquid.mods.sodium.client.model.color.ColorProvider;
 import me.jellysquid.mods.sodium.client.model.color.DefaultColorProviders;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildBuffers;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.buffers.ChunkModelBuilder;
+import me.jellysquid.mods.sodium.client.render.chunk.gfni.TranslucentGeometryCollector;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.DefaultMaterials;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.material.Material;
 import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
@@ -26,7 +27,6 @@ import net.fabricmc.fabric.api.client.render.fluid.v1.FluidRenderHandlerRegistry
 import net.minecraft.block.BlockState;
 import net.minecraft.block.SideShapeType;
 import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.model.ModelLoader;
 import net.minecraft.client.texture.Sprite;
 import net.minecraft.fluid.Fluid;
 import net.minecraft.fluid.FluidState;
@@ -42,6 +42,10 @@ import net.minecraft.world.BlockRenderView;
 import org.apache.commons.lang3.mutable.MutableFloat;
 import org.apache.commons.lang3.mutable.MutableInt;
 
+/**
+ * The fluid renderer produces the quads for block of fluid. It generates inside
+ * and outside quads for each face of the block.
+ */
 public class FluidRenderer {
     // TODO: allow this to be changed by vertex format
     // TODO: move fluid rendering to a separate render pass and control glPolygonOffset and glDepthFunc to fix this properly
@@ -102,7 +106,7 @@ public class FluidRenderer {
         return true;
     }
 
-    public void render(WorldSlice world, FluidState fluidState, BlockPos blockPos, BlockPos offset, ChunkBuildBuffers buffers) {
+    public void render(WorldSlice world, FluidState fluidState, BlockPos blockPos, BlockPos offset, TranslucentGeometryCollector collector, ChunkBuildBuffers buffers) {
         var material = DefaultMaterials.forFluidState(fluidState);
         var meshBuilder = buffers.get(material);
 
@@ -227,11 +231,14 @@ public class FluidRenderer {
             setVertex(quad, 3, 1.0F, northEastHeight, 0.0f, u4, v4);
 
             this.updateQuad(quad, world, blockPos, lighter, Direction.UP, 1.0F, colorProvider, fluidState);
-            this.writeQuad(meshBuilder, material, offset, quad, facing, false);
+            this.writeQuad(meshBuilder, collector, material, offset, quad, facing, false);
 
             if (fluidState.canFlowTo(world, this.scratchPos.set(posX, posY + 1, posZ))) {
-                this.writeQuad(meshBuilder, material, offset, quad,
-                        ModelQuadFacing.NEG_Y, true);
+                boolean aligned = northEastHeight == northWestHeight 
+                        && northWestHeight == southEastHeight 
+                        && southEastHeight == southWestHeight;
+                this.writeQuad(meshBuilder, collector, material, offset, quad,
+                        aligned ? ModelQuadFacing.NEG_Y : ModelQuadFacing.UNASSIGNED, true);
 
             }
 
@@ -252,7 +259,7 @@ public class FluidRenderer {
             setVertex(quad, 3, 1.0F, yOffset, 1.0F, maxU, maxV);
 
             this.updateQuad(quad, world, blockPos, lighter, Direction.DOWN, 1.0F, colorProvider, fluidState);
-            this.writeQuad(meshBuilder, material, offset, quad, ModelQuadFacing.NEG_Y, false);
+            this.writeQuad(meshBuilder, collector, material, offset, quad, ModelQuadFacing.NEG_Y, false);
 
         }
 
@@ -353,10 +360,10 @@ public class FluidRenderer {
                 ModelQuadFacing facing = ModelQuadFacing.fromDirection(dir);
 
                 this.updateQuad(quad, world, blockPos, lighter, dir, br, colorProvider, fluidState);
-                this.writeQuad(meshBuilder, material, offset, quad, facing, false);
+                this.writeQuad(meshBuilder, collector, material, offset, quad, facing, false);
 
                 if (!isOverlay) {
-                    this.writeQuad(meshBuilder, material, offset, quad, facing.getOpposite(), true);
+                    this.writeQuad(meshBuilder, collector, material, offset, quad, facing.getOpposite(), true);
                 }
 
             }
@@ -398,7 +405,7 @@ public class FluidRenderer {
         }
     }
 
-    private void writeQuad(ChunkModelBuilder builder, Material material, BlockPos offset, ModelQuadView quad,
+    private void writeQuad(ChunkModelBuilder builder, TranslucentGeometryCollector collector, Material material, BlockPos offset, ModelQuadView quad,
                            ModelQuadFacing facing, boolean flip) {
         var vertices = this.vertices;
 
@@ -418,6 +425,14 @@ public class FluidRenderer {
 
         if (sprite != null) {
             builder.addSprite(sprite);
+        }
+
+        if (material == DefaultMaterials.TRANSLUCENT && collector != null) {
+            if (facing == ModelQuadFacing.UNASSIGNED) {
+                // calculate the current GFNI normal but not the unit normal
+                quad.calculateNormals(false);
+            }
+            collector.appendQuad(quad, vertices, facing);
         }
 
         var vertexBuffer = builder.getVertexBuffer(facing);

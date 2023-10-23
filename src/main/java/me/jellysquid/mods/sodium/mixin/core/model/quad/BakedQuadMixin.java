@@ -3,7 +3,6 @@ package me.jellysquid.mods.sodium.mixin.core.model.quad;
 import me.jellysquid.mods.sodium.client.model.quad.BakedQuadView;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFlags;
-import me.jellysquid.mods.sodium.client.util.ModelQuadUtil;
 import net.minecraft.client.render.model.BakedQuad;
 import net.minecraft.client.texture.Sprite;
 import net.minecraft.util.math.Direction;
@@ -44,14 +43,20 @@ public abstract class BakedQuadMixin implements BakedQuadView {
 
     @Unique
     private int normal;
-
     @Unique
+    private int GFNINormX;
+    @Unique
+    private int GFNINormY;
+    @Unique
+    private int GFNINormZ;
     private ModelQuadFacing normalFace;
 
     @Inject(method = "<init>", at = @At("RETURN"))
     private void init(int[] vertexData, int colorIndex, Direction face, Sprite sprite, boolean shade, CallbackInfo ci) {
-        this.normal = ModelQuadUtil.calculateNormal(this);
-        this.normalFace = ModelQuadUtil.findNormalFace(this.normal);
+        // calculates the GFNI normal (side effect) and returns the packed unit normal
+        this.normal = calculateNormals(true);
+
+        this.normalFace = findNormalFace(this.normal);
 
         this.flags = ModelQuadFlags.getQuadFlags(this, face);
     }
@@ -84,6 +89,28 @@ public abstract class BakedQuadMixin implements BakedQuadView {
     @Override
     public int getNormal() {
         return this.normal;
+    }
+
+    @Override
+    public int getGFNINormX() {
+        return this.GFNINormX;
+    }
+
+    @Override
+    public int getGFNINormY() {
+        return this.GFNINormY;
+    }
+
+    @Override
+    public int getGFNINormZ() {
+        return this.GFNINormZ;
+    }
+
+    @Override
+    public void setGFNINormal(int x, int y, int z) {
+        this.GFNINormX = x;
+        this.GFNINormY = y;
+        this.GFNINormZ = z;
     }
 
     @Override

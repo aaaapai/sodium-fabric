@@ -1,5 +1,11 @@
 package me.jellysquid.mods.sodium.client.render.chunk.compile.tasks;
 
+import org.joml.Vector3dc;
+import org.joml.Vector3f;
+import org.joml.Vector3fc;
+
+import me.jellysquid.mods.sodium.client.render.chunk.RenderSection;
+import me.jellysquid.mods.sodium.client.render.chunk.compile.BuilderTaskOutput;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildContext;
 import me.jellysquid.mods.sodium.client.util.task.CancellationToken;
 
@@ -13,7 +19,27 @@ import me.jellysquid.mods.sodium.client.util.task.CancellationToken;
  * After the task completes, it returns a "build result" which contains any computed data that needs to be handled
  * on the main thread.
  */
-public abstract class ChunkBuilderTask<OUTPUT> {
+public abstract class ChunkBuilderTask<OUTPUT extends BuilderTaskOutput> {
+    protected final RenderSection render;
+    protected final int submitTime;
+    protected final Vector3fc cameraPos;
+
+    /**
+     * Constructs a new build task for the given chunk and converts the absolute camera position to a relative position. While the absolute position is stored as a double vector, the relative position is stored as a float vector.
+     * 
+     * @param render            The chunk to build
+     * @param time              The frame in which this task was created
+     * @param absoluteCameraPos The absolute position of the camera
+     */
+    public ChunkBuilderTask(RenderSection render, int time, Vector3dc absoluteCameraPos) {
+        this.render = render;
+        this.submitTime = time;
+        this.cameraPos = new Vector3f(
+                (float) (absoluteCameraPos.x() - (double) render.getOriginX()),
+                (float) (absoluteCameraPos.y() - (double) render.getOriginY()),
+                (float) (absoluteCameraPos.z() - (double) render.getOriginZ()));
+    }
+
     /**
      * Executes the given build task asynchronously from the calling thread. The implementation should be careful not
      * to access or modify global mutable state.
