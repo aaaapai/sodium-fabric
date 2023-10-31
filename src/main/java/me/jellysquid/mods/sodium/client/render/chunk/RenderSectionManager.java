@@ -22,7 +22,6 @@ import me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderS
 import me.jellysquid.mods.sodium.client.render.chunk.compile.tasks.ChunkBuilderTask;
 import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
 import me.jellysquid.mods.sodium.client.render.chunk.gfni.CameraMovement;
-import me.jellysquid.mods.sodium.client.render.chunk.gfni.DynamicData;
 import me.jellysquid.mods.sodium.client.render.chunk.gfni.GFNI;
 import me.jellysquid.mods.sodium.client.render.chunk.gfni.TranslucentData;
 import me.jellysquid.mods.sodium.client.render.chunk.lists.ChunkRenderList;
@@ -211,6 +210,10 @@ public class RenderSectionManager {
             return;
         }
 
+        if (section.getTranslucentData() != null) {
+            this.gfni.removeSection(section.getTranslucentData(), sectionPos);
+        }
+
         RenderRegion region = section.getRegion();
 
         if (region != null) {
@@ -221,8 +224,6 @@ public class RenderSectionManager {
         this.updateSectionInfo(section, null);
 
         section.delete();
-
-        this.gfni.removeSection(section.getTranslucentData(), sectionPos);
 
         this.needsGraphUpdate = true;
     }
@@ -306,7 +307,7 @@ public class RenderSectionManager {
         this.processChunkBuildResults(results);
 
         for (var result : results) {
-            result.deleteAfterUpload();
+            result.deleteAfterUploadSafe();
         }
 
         // TODO: only needed if the tasks actually changed the visibility (sort tasks
@@ -326,13 +327,12 @@ public class RenderSectionManager {
                 this.updateSectionInfo(result.render, chunkBuildOutput.info);
                 if (chunkBuildOutput.translucentData != null) {
                     this.gfni.integrateTranslucentData(oldData, chunkBuildOutput.translucentData, this.cameraPosition);
+
+                    // a rebuild always generates new translucent data which means applyTriggerChanges isn't necessary
+                    result.render.setTranslucentData(chunkBuildOutput.translucentData);
                 }
-            }
-            if (result instanceof ChunkSortOutput chunkSortOutput && chunkSortOutput.translucentData != null) {
-                result.render.setTranslucentData(chunkSortOutput.translucentData);
-                if (chunkSortOutput.translucentData instanceof DynamicData dynamicData && dynamicData.hasTriggerChanges()) {
-                    this.gfni.applyTriggerChanges(dynamicData, result.render.getPosition(), this.cameraPosition);
-                }
+            } else if (result instanceof ChunkSortOutput chunkSortOutput && chunkSortOutput.dynamicData.hasTriggerChanges()) {
+                this.gfni.applyTriggerChanges(chunkSortOutput.dynamicData, result.render.getPosition(), this.cameraPosition);
             }
 
             var job = result.render.getTaskCancellationToken();
@@ -346,8 +346,6 @@ public class RenderSectionManager {
     }
 
     private void updateSectionInfo(RenderSection render, BuiltSectionInfo info) {
-        // TODO: make this work with translucent data and figure out a nice way to use
-        // BuilderTaskOutput
         render.setInfo(info);
 
         if (info == null || ArrayUtils.isEmpty(info.globalBlockEntities)) {
@@ -361,7 +359,10 @@ public class RenderSectionManager {
         var map = new Reference2ReferenceLinkedOpenHashMap<RenderSection, BuilderTaskOutput>();
 
         for (var output : outputs) {
+            // when outdated or duplicate outputs are thrown out, make sure to delete their
+            // buffers to avoid memory leaks
             if (output.render.isDisposed() || output.render.getLastUploadFrame() > output.submitTime) {
+                output.deleteFully();
                 continue;
             }
 
@@ -370,6 +371,9 @@ public class RenderSectionManager {
 
             if (previous == null || previous.submitTime < output.submitTime) {
                 map.put(render, output);
+                if (previous != null) {
+                    previous.deleteFully();
+                }
             }
         }
 
@@ -411,10 +415,11 @@ public class RenderSectionManager {
 
                 section.setTaskCancellationToken(job);
             } else {
-                // TODO: why does this exist and where is this data read? is null translucent
-                // data ok?
+                // if the section is empty, doesn't exist or no sort task needs to be created
+                // for non-dynamic data, submit this null-task to set the built flag on the
+                // render section
                 var result = ChunkJobResult.successfully(new ChunkBuildOutput(
-                        section, frame, null, 
+                        section, frame, null,
                         BuiltSectionInfo.EMPTY, Collections.emptyMap()));
                 this.buildResults.add(result);
 
@@ -437,7 +442,7 @@ public class RenderSectionManager {
     }
 
     public ChunkBuilderSortingTask createSortTask(RenderSection render, int frame) {
-        return new ChunkBuilderSortingTask(render, frame, this.cameraPosition);
+        return ChunkBuilderSortingTask.createTask(render, frame, this.cameraPosition);
     }
 
     public void processGFNIMovement(CameraMovement movement) {
@@ -492,7 +497,7 @@ public class RenderSectionManager {
         return sections;
     }
 
-    public boolean scheduleSort(long sectionPos, boolean isAngleTrigger) {
+    public void scheduleSort(long sectionPos, boolean isDirectTrigger) {
         // TODO: Does this need to invalidate the section cache?
 
         RenderSection section = this.sectionByPosition.get(sectionPos);
@@ -505,13 +510,9 @@ public class RenderSectionManager {
             pendingUpdate = ChunkUpdateType.getPromotionUpdateType(section.getPendingUpdate(), pendingUpdate);
             if (pendingUpdate != null) {
                 section.setPendingUpdate(pendingUpdate);
-                return section.prepareTrigger(isAngleTrigger);
+                section.prepareTrigger(isDirectTrigger);
             }
-        } else {
-            // remove unloaded sections from triggering
-            return true;
         }
-        return false;
     }
 
     public void scheduleRebuild(int x, int y, int z, boolean important) {

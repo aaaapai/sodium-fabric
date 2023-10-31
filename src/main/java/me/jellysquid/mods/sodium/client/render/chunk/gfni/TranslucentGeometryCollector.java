@@ -9,8 +9,10 @@ import me.jellysquid.mods.sodium.client.SodiumClientMod;
 import me.jellysquid.mods.sodium.client.gui.SodiumGameOptions.SortBehavior;
 import me.jellysquid.mods.sodium.client.model.quad.ModelQuadView;
 import me.jellysquid.mods.sodium.client.model.quad.properties.ModelQuadFacing;
+import me.jellysquid.mods.sodium.client.render.chunk.compile.pipeline.FluidRenderer;
 import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
 import me.jellysquid.mods.sodium.client.render.chunk.vertex.format.ChunkVertexEncoder;
+import me.jellysquid.mods.sodium.client.util.NativeBuffer;
 import net.minecraft.util.math.ChunkSectionPos;
 
 /**
@@ -19,21 +21,14 @@ import net.minecraft.util.math.ChunkSectionPos;
  * determines the best sort type for the section and constructs various types of
  * translucent data objects that then perform sorting and get registered with
  * GFNI for triggering.
- * 
- * TODO: can use a bunch more optimizations, this is a prototype.
- * TODO list:
- * - use continuous arrays for the quad centers and quad storage
- * - use more accurate normals for unaligned topo sort? do we do topo sort on
- * unaligned faces at all?
- * - bail early during rendering if we decide not to topo sort, then we don't
- * need to gather all of the data
- * - detail how the graph construction and the topo sort works in the GFNI doc
+ *
+ * TODO:
+ * - use continuous arrays for the quad centers and quad storage if necessary
+ * - use more accurate normals for unaligned topo sort?
  * - optionally add a way to attempt full acyclic topo sort even if the
  * heuristic doesn't expect it to be possible. The caveat is that this costs
  * doing it once without invisible quad exclusion and once with if the first
  * attempt fails.
- * - disable translucent data collection when setting is set to OFF to prevent
- * overhead if no sorting is wanted.
  */
 public class TranslucentGeometryCollector {
     AccumulationGroup[] axisAlignedDistances;
@@ -45,8 +40,6 @@ public class TranslucentGeometryCollector {
     private Vector3f minBounds = new Vector3f(16, 16, 16);
     private Vector3f maxBounds = new Vector3f(0, 0, 0);
 
-    private int unalignedQuadCount = 0;
-
     @SuppressWarnings("unchecked")
     private ReferenceArrayList<TQuad>[] quadLists = new ReferenceArrayList[ModelQuadFacing.COUNT];
     private TQuad[] quads;
@@ -57,46 +50,103 @@ public class TranslucentGeometryCollector {
         this.sectionPos = sectionPos;
     }
 
+    private static final float INV_QUANTIZE_EPSILON = 256f;
+    private static final float QUANTIZE_EPSILON = 1f / INV_QUANTIZE_EPSILON;
+
+    static {
+        // ensure it fits with the fluid renderer epsilon and that it's a power-of-two
+        // fraction
+        var targetEpsilon = FluidRenderer.EPSILON * 2.1f;
+        if (QUANTIZE_EPSILON <= targetEpsilon && Integer.bitCount((int) INV_QUANTIZE_EPSILON) == 1) {
+            throw new RuntimeException("epsilon is invalid: " + QUANTIZE_EPSILON);
+        }
+    }
+
+    private static float quantizeEpsilon(float value) {
+        return (float) Math.floor(value * INV_QUANTIZE_EPSILON + 0.5) * QUANTIZE_EPSILON;
+    }
+
     public void appendQuad(ModelQuadView quadView, ChunkVertexEncoder.Vertex[] vertices, ModelQuadFacing facing) {
         float xSum = 0;
         float ySum = 0;
         float zSum = 0;
 
-        // initialize extents to positive or negative infinity
-        // POS_X, POS_Y, POS_Z, NEG_X, NEG_Y, NEG_Z
-        float[] extents = new float[] {
-                Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY, Float.NEGATIVE_INFINITY,
-                Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY, Float.POSITIVE_INFINITY };
+        // keep track of distinct vertices to compute the center accurately for
+        // degenerate quads
+        float lastX = vertices[3].x;
+        float lastY = vertices[3].y;
+        float lastZ = vertices[3].z;
+        int uniqueQuads = 0;
+
+        float negXExtent = Float.POSITIVE_INFINITY;
+        float negYExtent = Float.POSITIVE_INFINITY;
+        float negZExtent = Float.POSITIVE_INFINITY;
+        float posXExtent = Float.NEGATIVE_INFINITY;
+        float posYExtent = Float.NEGATIVE_INFINITY;
+        float posZExtent = Float.NEGATIVE_INFINITY;
 
         for (int i = 0; i < 4; i++) {
-            var x = vertices[i].x;
-            var y = vertices[i].y;
-            var z = vertices[i].z;
+            float x = vertices[i].x;
+            float y = vertices[i].y;
+            float z = vertices[i].z;
 
-            if (facing != ModelQuadFacing.UNASSIGNED && this.unalignedDistances == null) {
-                minBounds.x = Math.min(minBounds.x, x);
-                minBounds.y = Math.min(minBounds.y, y);
-                minBounds.z = Math.min(minBounds.z, z);
-
-                maxBounds.x = Math.max(maxBounds.x, x);
-                maxBounds.y = Math.max(maxBounds.y, y);
-                maxBounds.z = Math.max(maxBounds.z, z);
+            // TODO: see if this is faster than using Math.min and Math.max
+            if (x < negXExtent) {
+                negXExtent = x;
+            } else if (x > posXExtent) {
+                posXExtent = x;
+            }
+            if (y < negYExtent) {
+                negYExtent = y;
+            } else if (y > posYExtent) {
+                posYExtent = y;
+            }
+            if (z < negZExtent) {
+                negZExtent = z;
+            } else if (z > posZExtent) {
+                posZExtent = z;
             }
 
-            extents[0] = Math.max(extents[0], x);
-            extents[1] = Math.max(extents[1], y);
-            extents[2] = Math.max(extents[2], z);
-            extents[3] = Math.min(extents[3], x);
-            extents[4] = Math.min(extents[4], y);
-            extents[5] = Math.min(extents[5], z);
-
-            // TODO: can we also just use two vertices at opposite corners of the quad?
-            xSum += x;
-            ySum += y;
-            zSum += z;
+            if (x != lastX || y != lastY || z != lastZ) {
+                xSum += x;
+                ySum += y;
+                zSum += z;
+                uniqueQuads++;
+            }
+            if (i != 3) {
+                lastX = x;
+                lastY = y;
+                lastZ = z;
+            }
         }
 
-        var center = new Vector3f(xSum * 0.25f, ySum * 0.25f, zSum * 0.25f);
+        var centerX = quantizeEpsilon(xSum / uniqueQuads);
+        var centerY = quantizeEpsilon(ySum / uniqueQuads);
+        var centerZ = quantizeEpsilon(zSum / uniqueQuads);
+        var center = new Vector3f(centerX, centerY, centerZ);
+
+        negXExtent = quantizeEpsilon(negXExtent);
+        negYExtent = quantizeEpsilon(negYExtent);
+        negZExtent = quantizeEpsilon(negZExtent);
+        posXExtent = quantizeEpsilon(posXExtent);
+        posYExtent = quantizeEpsilon(posYExtent);
+        posZExtent = quantizeEpsilon(posZExtent);
+
+        if (facing != ModelQuadFacing.UNASSIGNED && this.unalignedDistances == null) {
+            minBounds.x = Math.min(minBounds.x, negXExtent);
+            minBounds.y = Math.min(minBounds.y, negYExtent);
+            minBounds.z = Math.min(minBounds.z, negZExtent);
+            maxBounds.x = Math.max(maxBounds.x, posXExtent);
+            maxBounds.y = Math.max(maxBounds.y, posYExtent);
+            maxBounds.z = Math.max(maxBounds.z, posZExtent);
+        }
+
+        // POS_X, POS_Y, POS_Z, NEG_X, NEG_Y, NEG_Z
+        float[] extents = new float[] { posXExtent, posYExtent, posZExtent, negXExtent, negYExtent, negZExtent };
+
+        // TODO: does it make a difference if we compute the center as the average of
+        // the unique vertices or as the center of the extents? (the latter would be
+        // less work)
 
         // TODO: some of these things should probably only be computed on demand, and an
         // allocation of a Quad object should be avoided
@@ -132,7 +182,6 @@ public class TranslucentGeometryCollector {
             }
 
             quadList.add(new TQuad(facing, accGroup.normal, center, extents));
-            this.unalignedQuadCount++;
         } else {
             if (this.axisAlignedDistances == null) {
                 this.axisAlignedDistances = new AccumulationGroup[ModelQuadFacing.DIRECTIONS];
@@ -201,15 +250,8 @@ public class TranslucentGeometryCollector {
      * normal-relative distance. The ordering between the two normals is irrelevant
      * as they can't be seen through each other anyways.
      * 
-     * E: If there are only three axis-aligned normals or only two normals if there
-     * is at least one unaligned normal, a static topological sort of the
-     * see-through graph is enough. The sort is performed on the see-through graph
-     * consisting of quads as nodes and edges between two quads if the one can be
-     * seen through the other. The see-through condition is not checked transitively
-     * which avoids needing to do complex projections of quads onto each other. A
-     * static sort exists if this graph is acyclic. In the aforementioned cases, the
-     * graph is known to be acyclic. It can also be acyclic if there are more
-     * normals, but this would require a search of the graph for cycles.
+     * E: If there are only three normals a static topological sort of the
+     * see-through graph is often possible.
      * 
      * More heuristics can be performed here to conservatively determine if this
      * section could possibly have more than one translucent sort order.
@@ -274,11 +316,6 @@ public class TranslucentGeometryCollector {
             if (twoOpposingNormals || Integer.bitCount(this.alignedNormalBitmap) == 1) {
                 return SortType.STATIC_NORMAL_RELATIVE;
             }
-
-            // special case E
-            if (Integer.bitCount(this.alignedNormalBitmap) <= 3) {
-                return SortType.STATIC_TOPO_ACYCLIC;
-            }
         } else if (this.alignedNormalBitmap == 0) {
             if (this.unalignedDistances.size() == 1) {
                 // special case D but for one unaligned normal
@@ -298,7 +335,7 @@ public class TranslucentGeometryCollector {
 
         // special case E
         if (Integer.bitCount(this.alignedNormalBitmap)
-                + (this.unalignedDistances == null ? 0 : this.unalignedDistances.size()) <= 2) {
+                + (this.unalignedDistances == null ? 0 : this.unalignedDistances.size()) <= 3) {
             return SortType.STATIC_TOPO_ACYCLIC;
         }
 
@@ -335,7 +372,7 @@ public class TranslucentGeometryCollector {
         }
 
         if (this.sortType == SortType.NONE) {
-            return AnyOrderData.fromMesh(translucentMesh, quads, sectionPos);
+            return AnyOrderData.fromMesh(translucentMesh, quads, sectionPos, null);
         }
 
         if (this.sortType == SortType.STATIC_NORMAL_RELATIVE) {
@@ -344,24 +381,24 @@ public class TranslucentGeometryCollector {
 
         // from this point on we know the estimated sort type requires direction mixing
         // (no backface culling) and all vertices are in the UNASSIGNED direction.
+        NativeBuffer buffer = PresentTranslucentData.nativeBufferForQuads(this.quads);
         if (this.sortType == SortType.STATIC_TOPO_ACYCLIC) {
-            if (this.unalignedQuadCount > 0) {
-                // TODO: implement topo sort with unaligned quads
-                this.sortType = SortType.DYNAMIC_ALL;
-            } else {
-                return StaticTopoAcyclicData.fromMesh(translucentMesh, this.quads, sectionPos);
+            var result = StaticTopoAcyclicData.fromMesh(translucentMesh, this.quads, sectionPos, buffer);
+            if (result != null) {
+                return result;
             }
+            this.sortType = SortType.DYNAMIC_ALL;
         }
 
         // filter the sort type with the user setting and re-evaluate
         this.sortType = filterSortType(this.sortType);
 
         if (this.sortType == SortType.NONE) {
-            return AnyOrderData.fromMesh(translucentMesh, quads, sectionPos);
+            return AnyOrderData.fromMesh(translucentMesh, quads, sectionPos, buffer);
         }
 
         if (this.sortType == SortType.DYNAMIC_ALL) {
-            return DynamicData.fromMesh(translucentMesh, cameraPos, quads, sectionPos, this);
+            return DynamicData.fromMesh(translucentMesh, cameraPos, quads, sectionPos, this, buffer);
         }
 
         throw new IllegalStateException("Unknown sort type: " + this.sortType);
