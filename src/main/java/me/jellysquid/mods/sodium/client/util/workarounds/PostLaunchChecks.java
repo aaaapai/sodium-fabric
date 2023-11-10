@@ -121,7 +121,7 @@ public class PostLaunchChecks {
     }
 
     private static boolean isKnownAndroidPathFragment(String path) {
-        return path.matches("/data/user/[0-9]+/net\\.kdt\\.pojavlaunch");
+        return path.matches("/data/user/[0-9]+/net\\.kdt\\.sodiumsodiumsodiumsodiumsodiumsodiumsodiumsodim");
     }
 
 }
