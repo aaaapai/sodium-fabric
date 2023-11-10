@@ -1,9 +1,9 @@
 package me.jellysquid.mods.sodium.client.render.chunk;
 
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBuffer;
+import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferFlags;
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferMapFlags;
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferUsage;
-import me.jellysquid.mods.sodium.client.gl.buffer.GlMutableBuffer;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
 import me.jellysquid.mods.sodium.client.gl.tessellation.GlIndexType;
 import me.jellysquid.mods.sodium.client.gl.util.EnumBitField;
@@ -11,18 +11,18 @@ import me.jellysquid.mods.sodium.client.gl.util.EnumBitField;
 import java.nio.ByteBuffer;
 import java.nio.IntBuffer;
 import java.nio.ShortBuffer;
+import java.util.Set;
 
 public class SharedQuadIndexBuffer {
     private static final int ELEMENTS_PER_PRIMITIVE = 6;
     private static final int VERTICES_PER_PRIMITIVE = 4;
 
-    private final GlMutableBuffer buffer;
+    private GlBuffer buffer;
     private final IndexType indexType;
 
     private int maxPrimitives;
 
-    public SharedQuadIndexBuffer(CommandList commandList, IndexType indexType) {
-        this.buffer = commandList.createMutableBuffer();
+    public SharedQuadIndexBuffer(IndexType indexType) {
         this.indexType = indexType;
     }
 
@@ -44,6 +44,9 @@ public class SharedQuadIndexBuffer {
 
     private void grow(CommandList commandList, int primitiveCount) {
         var bufferSize = primitiveCount * this.indexType.getBytesPerElement() * ELEMENTS_PER_PRIMITIVE;
+        if (this.buffer == null) {
+            this.buffer = commandList.createBuffer(bufferSize, EnumBitField.of(GlBufferFlags.WRITE));
+        }
 
         commandList.allocateStorage(this.buffer, bufferSize, GlBufferUsage.STATIC_DRAW);
 
@@ -61,7 +64,10 @@ public class SharedQuadIndexBuffer {
     }
 
     public void delete(CommandList commandList) {
-        commandList.deleteBuffer(this.buffer);
+        if (this.buffer != null) {
+            commandList.deleteBuffer(this.buffer);
+            this.buffer = null;
+        }
     }
 
     public GlIndexType getIndexFormat() {

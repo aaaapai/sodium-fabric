@@ -1,17 +1,20 @@
 package me.jellysquid.mods.sodium.client.gl.arena.staging;
 
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBuffer;
+import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferFlags;
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferUsage;
-import me.jellysquid.mods.sodium.client.gl.buffer.GlMutableBuffer;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
+import me.jellysquid.mods.sodium.client.gl.util.EnumBitField;
+import org.lwjgl.opengl.GL20C;
 
 import java.nio.ByteBuffer;
+import java.util.Set;
 
 public class FallbackStagingBuffer implements StagingBuffer {
-    private final GlMutableBuffer fallbackBufferObject;
+    private final GlBuffer fallbackBufferObject;
 
-    public FallbackStagingBuffer(CommandList commandList) {
-        this.fallbackBufferObject = commandList.createMutableBuffer();
+    public FallbackStagingBuffer(CommandList commandList, int size) {
+        this.fallbackBufferObject = commandList.createBuffer(size, EnumBitField.of(GlBufferFlags.READ, GlBufferFlags.WRITE));
     }
 
     @Override

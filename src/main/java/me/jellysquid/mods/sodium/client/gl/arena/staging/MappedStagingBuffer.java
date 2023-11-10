@@ -15,8 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class MappedStagingBuffer implements StagingBuffer {
-    private static final EnumBitField<GlBufferStorageFlags> STORAGE_FLAGS =
-            EnumBitField.of(GlBufferStorageFlags.PERSISTENT, GlBufferStorageFlags.CLIENT_STORAGE, GlBufferStorageFlags.MAP_WRITE);
+    private static final EnumBitField<GlBufferFlags> STORAGE_FLAGS =
+            EnumBitField.of(GlBufferFlags.PERSISTENT, GlBufferFlags.CLIENT_STORAGE, GlBufferFlags.WRITE);
 
     private static final EnumBitField<GlBufferMapFlags> MAP_FLAGS =
             EnumBitField.of(GlBufferMapFlags.PERSISTENT, GlBufferMapFlags.INVALIDATE_BUFFER, GlBufferMapFlags.WRITE, GlBufferMapFlags.EXPLICIT_FLUSH);
@@ -33,16 +33,12 @@ public class MappedStagingBuffer implements StagingBuffer {
     private final int capacity;
     private int remaining;
 
-    public MappedStagingBuffer(CommandList commandList) {
-        this(commandList, 1024 * 1024 * 16 /* 16 MB */);
-    }
-
     public MappedStagingBuffer(CommandList commandList, int capacity) {
-        GlImmutableBuffer buffer = commandList.createImmutableBuffer(capacity, STORAGE_FLAGS);
-        GlBufferMapping map = commandList.mapBuffer(buffer, 0, capacity, MAP_FLAGS);
+        var buffer = commandList.createBuffer(capacity, STORAGE_FLAGS);
+        var map = commandList.mapBuffer(buffer, 0, capacity, MAP_FLAGS);
 
         this.mappedBuffer = new MappedBuffer(buffer, map);
-        this.fallbackStagingBuffer = new FallbackStagingBuffer(commandList);
+        this.fallbackStagingBuffer = new FallbackStagingBuffer(commandList, capacity);
         this.capacity = capacity;
         this.remaining = this.capacity;
     }
@@ -178,7 +174,7 @@ public class MappedStagingBuffer implements StagingBuffer {
         }
     }
 
-    private record MappedBuffer(GlImmutableBuffer buffer,
+    private record MappedBuffer(GlBuffer buffer,
                                 GlBufferMapping map) {
         public void delete(CommandList commandList) {
             commandList.unmap(this.map);

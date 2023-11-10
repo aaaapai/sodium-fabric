@@ -2,15 +2,13 @@ package me.jellysquid.mods.sodium.client.gl.arena;
 
 import me.jellysquid.mods.sodium.client.gl.arena.staging.StagingBuffer;
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBuffer;
+import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferFlags;
 import me.jellysquid.mods.sodium.client.gl.buffer.GlBufferUsage;
-import me.jellysquid.mods.sodium.client.gl.buffer.GlMutableBuffer;
 import me.jellysquid.mods.sodium.client.gl.device.CommandList;
+import me.jellysquid.mods.sodium.client.gl.util.EnumBitField;
 
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.LinkedList;
-import java.util.List;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -22,7 +20,7 @@ public class GlBufferArena {
     private final int resizeIncrement;
 
     private final StagingBuffer stagingBuffer;
-    private GlMutableBuffer arenaBuffer;
+    private GlBuffer arenaBuffer;
 
     private GlBufferSegment head;
 
@@ -40,8 +38,8 @@ public class GlBufferArena {
         this.head = new GlBufferSegment(this, 0, initialCapacity);
         this.head.setFree(true);
 
-        this.arenaBuffer = commands.createMutableBuffer();
-        commands.allocateStorage(this.arenaBuffer, this.capacity * stride, BUFFER_USAGE);
+        this.arenaBuffer = commands.createBuffer(this.capacity * stride, EnumBitField.of(GlBufferFlags.WRITE));
+        commands.allocateStorage(this.arenaBuffer, this.arenaBuffer.getSize(), BUFFER_USAGE);
 
         this.stagingBuffer = stagingBuffer;
     }
@@ -118,10 +116,10 @@ public class GlBufferArena {
     }
 
     private void transferSegments(CommandList commandList, Collection<PendingBufferCopyCommand> list, int capacity) {
-        GlMutableBuffer srcBufferObj = this.arenaBuffer;
-        GlMutableBuffer dstBufferObj = commandList.createMutableBuffer();
+        var srcBufferObj = this.arenaBuffer;
+        var dstBufferObj = commandList.createBuffer(capacity * this.stride, EnumBitField.of(GlBufferFlags.WRITE));
 
-        commandList.allocateStorage(dstBufferObj, capacity * this.stride, BUFFER_USAGE);
+        commandList.allocateStorage(dstBufferObj, dstBufferObj.getSize(), BUFFER_USAGE);
 
         for (PendingBufferCopyCommand cmd : list) {
             commandList.copyBufferSubData(srcBufferObj, dstBufferObj,

@@ -36,7 +36,7 @@ public class DefaultChunkRenderer extends ShaderChunkRenderer {
         super(device, vertexType);
 
         this.batch = new MultiDrawBatch((ModelQuadFacing.COUNT * RenderRegion.REGION_SIZE) + 1);
-        this.sharedIndexBuffer = new SharedQuadIndexBuffer(device.createCommandList(), SharedQuadIndexBuffer.IndexType.INTEGER);
+        this.sharedIndexBuffer = new SharedQuadIndexBuffer(SharedQuadIndexBuffer.IndexType.INTEGER);
     }
 
     @Override

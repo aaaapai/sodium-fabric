@@ -1,5 +1,6 @@
 package me.jellysquid.mods.sodium.client.gl.device;
 
+import me.jellysquid.mods.sodium.client.SodiumClientMod;
 import me.jellysquid.mods.sodium.client.gl.array.GlVertexArray;
 import me.jellysquid.mods.sodium.client.gl.buffer.*;
 import me.jellysquid.mods.sodium.client.gl.functions.DeviceFunctions;
@@ -11,16 +12,24 @@ import net.minecraft.client.render.BufferRenderer;
 import org.lwjgl.opengl.*;
 
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
+import java.util.List;
 
 public class GLRenderDevice implements RenderDevice {
     private final GlStateTracker stateTracker = new GlStateTracker();
-    private final CommandList commandList = new ImmediateCommandList(this.stateTracker);
+    private final CommandList commandList = new ImmediateCommandList(this, this.stateTracker);
     private final DrawCommandList drawCommandList = new ImmediateDrawCommandList();
 
     private final DeviceFunctions functions = new DeviceFunctions(this);
 
     private boolean isActive;
     private GlTessellation activeTessellation;
+
+    private final List<GlMemoryStats> stats = new ArrayList<>();
+
+    private void flushMemoryStats(GlMemoryStats stats) {
+        this.stats.add(stats);
+    }
 
     @Override
     public CommandList createCommandList() {
@@ -49,6 +58,28 @@ public class GLRenderDevice implements RenderDevice {
 
         this.stateTracker.clear();
         this.isActive = false;
+
+        if (!this.stats.isEmpty()) {
+            printStats(this.stats);
+        }
+        this.stats.clear();
+    }
+
+    private static void printStats(List<GlMemoryStats> stats) {
+        StringBuilder builder = new StringBuilder();
+
+        for (int i = 0; i < stats.size(); i++) {
+            builder.append("""
+                %s Stats:
+                %s
+                """.formatted(i, stats.get(i)));
+        }
+
+        SodiumClientMod.logger().info("""
+                Flushed memory statistics
+                
+                %s
+                """.formatted(builder));
     }
 
     @Override
@@ -68,9 +99,12 @@ public class GLRenderDevice implements RenderDevice {
     }
 
     private class ImmediateCommandList implements CommandList {
+        private final GLRenderDevice device;
         private final GlStateTracker stateTracker;
+        private final GlMemoryStats stats = new GlMemoryStats();
 
-        private ImmediateCommandList(GlStateTracker stateTracker) {
+        private ImmediateCommandList(GLRenderDevice device, GlStateTracker stateTracker) {
+            this.device = device;
             this.stateTracker = stateTracker;
         }
 
@@ -82,11 +116,12 @@ public class GLRenderDevice implements RenderDevice {
         }
 
         @Override
-        public void uploadData(GlMutableBuffer glBuffer, ByteBuffer byteBuffer, GlBufferUsage usage) {
+        public void uploadData(GlBuffer glBuffer, ByteBuffer byteBuffer, GlBufferUsage usage) {
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, glBuffer);
 
             GL20C.glBufferData(GlBufferTarget.ARRAY_BUFFER.getTargetParameter(), byteBuffer, usage.getId());
-            glBuffer.setSize(byteBuffer.remaining());
+
+            this.stats.memUsed += byteBuffer.remaining();
         }
 
         @Override
@@ -112,11 +147,12 @@ public class GLRenderDevice implements RenderDevice {
         }
 
         @Override
-        public void allocateStorage(GlMutableBuffer buffer, long bufferSize, GlBufferUsage usage) {
+        public void allocateStorage(GlBuffer buffer, long bufferSize, GlBufferUsage usage) {
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, buffer);
 
             GL20C.glBufferData(GlBufferTarget.ARRAY_BUFFER.getTargetParameter(), bufferSize, usage.getId());
-            buffer.setSize(bufferSize);
+
+            this.stats.memAlloc += bufferSize;
         }
 
         @Override
@@ -131,6 +167,8 @@ public class GLRenderDevice implements RenderDevice {
             buffer.invalidateHandle();
 
             GL20C.glDeleteBuffers(handle);
+
+            this.stats.memAlloc -= buffer.getSize();
         }
 
         @Override
@@ -145,7 +183,7 @@ public class GLRenderDevice implements RenderDevice {
 
         @Override
         public void flush() {
-            // NO-OP
+            this.device.flushMemoryStats(this.stats);
         }
 
         @Override
@@ -167,25 +205,24 @@ public class GLRenderDevice implements RenderDevice {
                 throw new IllegalStateException("Buffer is already mapped");
             }
 
-            if (flags.contains(GlBufferMapFlags.PERSISTENT) && !(buffer instanceof GlImmutableBuffer)) {
-                throw new IllegalStateException("Tried to map mutable buffer as persistent");
+            if (length > buffer.getSize()) {
+                System.out.println("Requesting size " + length + ", max size " + buffer.getSize());
+                throw new IllegalStateException("Length exceeded buffer size");
             }
 
             // TODO: speed this up?
-            if (buffer instanceof GlImmutableBuffer) {
-                EnumBitField<GlBufferStorageFlags> bufferFlags = ((GlImmutableBuffer) buffer).getFlags();
+            var bufferFlags = buffer.getFlags();
 
-                if (flags.contains(GlBufferMapFlags.PERSISTENT) && !bufferFlags.contains(GlBufferStorageFlags.PERSISTENT)) {
-                    throw new IllegalArgumentException("Tried to map non-persistent buffer as persistent");
-                }
+            if (flags.contains(GlBufferMapFlags.PERSISTENT) && !bufferFlags.contains(GlBufferFlags.PERSISTENT)) {
+                throw new IllegalArgumentException("Tried to map non-persistent buffer as persistent");
+            }
 
-                if (flags.contains(GlBufferMapFlags.WRITE) && !bufferFlags.contains(GlBufferStorageFlags.MAP_WRITE)) {
-                    throw new IllegalStateException("Tried to map non-writable buffer as writable");
-                }
+            if (flags.contains(GlBufferMapFlags.WRITE) && !bufferFlags.contains(GlBufferFlags.WRITE)) {
+                throw new IllegalStateException("Tried to map non-writable buffer as writable");
+            }
 
-                if (flags.contains(GlBufferMapFlags.READ) && !bufferFlags.contains(GlBufferStorageFlags.MAP_READ)) {
-                    throw new IllegalStateException("Tried to map non-readable buffer as readable");
-                }
+            if (flags.contains(GlBufferMapFlags.READ) && !bufferFlags.contains(GlBufferFlags.READ)) {
+                throw new IllegalStateException("Tried to map non-readable buffer as readable");
             }
 
             this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, buffer);
@@ -197,9 +234,9 @@ public class GLRenderDevice implements RenderDevice {
             }
 
             GlBufferMapping mapping = new GlBufferMapping(buffer, buf);
-
             buffer.setActiveMapping(mapping);
 
+            this.stats.memUsed += mapping.getMemoryBuffer().remaining();
             return mapping;
         }
 
@@ -213,6 +250,8 @@ public class GLRenderDevice implements RenderDevice {
             GL32C.glUnmapBuffer(GlBufferTarget.ARRAY_BUFFER.getTargetParameter());
 
             buffer.setActiveMapping(null);
+
+            this.stats.memUsed += map.getMemoryBuffer().remaining();
             map.dispose();
         }
 
@@ -224,6 +263,8 @@ public class GLRenderDevice implements RenderDevice {
 
             this.bindBuffer(GlBufferTarget.COPY_READ_BUFFER, buffer);
             GL32C.glFlushMappedBufferRange(GlBufferTarget.COPY_READ_BUFFER.getTargetParameter(), offset, length);
+
+            this.stats.memUsed += map.getMemoryBuffer().remaining();
         }
 
         @Override
@@ -238,17 +279,14 @@ public class GLRenderDevice implements RenderDevice {
         }
 
         @Override
-        public GlMutableBuffer createMutableBuffer() {
-            return new GlMutableBuffer();
-        }
+        public GlBuffer createBuffer(int size, EnumBitField<GlBufferFlags> flags) {
+            var buffer = new GlBuffer(GL20C.glGenBuffers(), size, flags);
 
-        @Override
-        public GlImmutableBuffer createImmutableBuffer(long bufferSize, EnumBitField<GlBufferStorageFlags> flags) {
-            GlImmutableBuffer buffer = new GlImmutableBuffer(flags);
-
-            this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, buffer);
-            GLRenderDevice.this.functions.getBufferStorageFunctions()
-                    .createBufferStorage(GlBufferTarget.ARRAY_BUFFER, bufferSize, flags);
+            if (flags.contains(GlBufferFlags.PERSISTENT)) {
+                this.bindBuffer(GlBufferTarget.ARRAY_BUFFER, buffer);
+                GLRenderDevice.this.functions.getBufferStorageFunctions()
+                        .createBufferStorage(GlBufferTarget.ARRAY_BUFFER, size, flags);
+            }
 
             return buffer;
         }

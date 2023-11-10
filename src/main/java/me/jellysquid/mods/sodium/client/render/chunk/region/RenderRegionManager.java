@@ -25,7 +25,7 @@ public class RenderRegionManager {
     private final StagingBuffer stagingBuffer;
 
     public RenderRegionManager(CommandList commandList) {
-        this.stagingBuffer = createStagingBuffer(commandList);
+        this.stagingBuffer = createStagingBuffer(commandList, 1024 * 1024 * 16);
     }
 
     public void update() {
@@ -149,11 +149,12 @@ public class RenderRegionManager {
     }
 
 
-    private static StagingBuffer createStagingBuffer(CommandList commandList) {
+    private static StagingBuffer createStagingBuffer(CommandList commandList, int capacity) {
+        System.out.println("Allocating staging buffer " + capacity);
         if (SodiumClientMod.options().advanced.useAdvancedStagingBuffers && MappedStagingBuffer.isSupported(RenderDevice.INSTANCE)) {
-            return new MappedStagingBuffer(commandList);
+            return new MappedStagingBuffer(commandList, capacity);
         }
 
-        return new FallbackStagingBuffer(commandList);
+        return new FallbackStagingBuffer(commandList, capacity);
     }
 }
