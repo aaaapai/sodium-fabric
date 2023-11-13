@@ -19,7 +19,7 @@ jobs:
       - name: Set up JDK
         uses: actions/setup-java@main
         with:
-          distribution: 'temurin'
+          distribution: 'microsoft'
           java-version: '21'
       - name: Initialize caches
         uses: actions/cache@main
