@@ -1,6 +1,8 @@
 package me.jellysquid.mods.sodium.client.render.chunk.compile.tasks;
 
 import it.unimi.dsi.fastutil.objects.Reference2ReferenceOpenHashMap;
+import me.jellysquid.mods.sodium.client.SodiumClientMod;
+import me.jellysquid.mods.sodium.client.gui.SodiumGameOptions.SortBehavior;
 import me.jellysquid.mods.sodium.client.render.chunk.RenderSection;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildBuffers;
 import me.jellysquid.mods.sodium.client.render.chunk.compile.ChunkBuildContext;
@@ -11,6 +13,9 @@ import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionInfo;
 import me.jellysquid.mods.sodium.client.render.chunk.data.BuiltSectionMeshParts;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.DefaultTerrainRenderPasses;
 import me.jellysquid.mods.sodium.client.render.chunk.terrain.TerrainRenderPass;
+import me.jellysquid.mods.sodium.client.render.chunk.translucent_sorting.SortType;
+import me.jellysquid.mods.sodium.client.render.chunk.translucent_sorting.TranslucentData;
+import me.jellysquid.mods.sodium.client.render.chunk.translucent_sorting.TranslucentGeometryCollector;
 import me.jellysquid.mods.sodium.client.util.task.CancellationToken;
 import me.jellysquid.mods.sodium.client.world.WorldSlice;
 import me.jellysquid.mods.sodium.client.world.cloned.ChunkRenderContext;
@@ -29,6 +34,8 @@ import net.minecraft.util.math.BlockPos;
 
 import java.util.Map;
 
+import org.joml.Vector3dc;
+
 /**
  * Rebuilds all the meshes of a chunk for each given render pass with non-occluded blocks. The result is then uploaded
  * to graphics memory on the main thread.
@@ -37,15 +44,11 @@ import java.util.Map;
  * array allocations, they are pooled to ensure that the garbage collector doesn't become overloaded.
  */
 public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> {
-    private final RenderSection render;
     private final ChunkRenderContext renderContext;
 
-    private final int buildTime;
-
-    public ChunkBuilderMeshingTask(RenderSection render, ChunkRenderContext renderContext, int time) {
-        this.render = render;
+    public ChunkBuilderMeshingTask(RenderSection render, int buildTime, Vector3dc cameraPos, ChunkRenderContext renderContext) {
+        super(render, buildTime, cameraPos);
         this.renderContext = renderContext;
-        this.buildTime = time;
     }
 
     @Override
@@ -73,7 +76,11 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
         BlockPos.Mutable blockPos = new BlockPos.Mutable(minX, minY, minZ);
         BlockPos.Mutable modelOffset = new BlockPos.Mutable();
 
-        BlockRenderContext context = new BlockRenderContext(slice);
+        TranslucentGeometryCollector collector = null;
+        if (SodiumClientMod.options().performance.sortBehavior != SortBehavior.OFF) {
+            collector = new TranslucentGeometryCollector(render.getPosition());
+        }
+        BlockRenderContext context = new BlockRenderContext(slice, collector);
 
         try {
             for (int y = minY; y < maxY; y++) {
@@ -106,7 +113,7 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
                         FluidState fluidState = blockState.getFluidState();
 
                         if (!fluidState.isEmpty()) {
-                            cache.getFluidRenderer().render(slice, fluidState, blockPos, modelOffset, buffers);
+                            cache.getFluidRenderer().render(slice, fluidState, blockPos, modelOffset, collector, buffers);
                         }
 
                         if (blockState.hasBlockEntity()) {
@@ -135,10 +142,18 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             throw fillCrashInfo(CrashReport.create(ex, "Encountered exception while building chunk meshes"), slice, blockPos);
         }
 
+        SortType sortType = SortType.NONE;
+        if (collector != null) {
+            sortType = collector.finishRendering();
+        }
+
         Map<TerrainRenderPass, BuiltSectionMeshParts> meshes = new Reference2ReferenceOpenHashMap<>();
 
         for (TerrainRenderPass pass : DefaultTerrainRenderPasses.ALL) {
-            BuiltSectionMeshParts mesh = buffers.createMesh(pass);
+            // consolidate all translucent geometry into UNASSIGNED so that it's rendered
+            // all together if it needs to share an index buffer between the directions
+            boolean isTranslucent = pass == DefaultTerrainRenderPasses.TRANSLUCENT;
+            BuiltSectionMeshParts mesh = buffers.createMesh(pass, isTranslucent && sortType.needsDirectionMixing);
 
             if (mesh != null) {
                 meshes.put(pass, mesh);
@@ -146,9 +161,20 @@ public class ChunkBuilderMeshingTask extends ChunkBuilderTask<ChunkBuildOutput> 
             }
         }
 
+        // cancellation opportunity right before translucent sorting
+        if (cancellationToken.isCancelled()) {
+            return null;
+        }
+
+        TranslucentData translucentData = null;
+        if (collector != null) {
+            translucentData = collector.getTranslucentData(
+                render.getTranslucentData(), meshes.get(DefaultTerrainRenderPasses.TRANSLUCENT), cameraPos);
+        }
+
         renderData.setOcclusionData(occluder.build());
 
-        return new ChunkBuildOutput(this.render, renderData.build(), meshes, this.buildTime);
+        return new ChunkBuildOutput(this.render, this.submitTime, translucentData, renderData.build(), meshes);
     }
 
     private CrashException fillCrashInfo(CrashReport report, WorldSlice slice, BlockPos pos) {

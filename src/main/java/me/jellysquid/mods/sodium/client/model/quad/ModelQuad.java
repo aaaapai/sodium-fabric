@@ -5,7 +5,8 @@ import net.minecraft.client.texture.Sprite;
 import static me.jellysquid.mods.sodium.client.util.ModelQuadUtil.*;
 
 /**
- * A simple implementation of the {@link ModelQuadViewMutable} interface which can provide an on-heap scratch area
+ * A simple implementation of the {@link ModelQuadViewMutable} interface which
+ * can provide an on-heap scratch area
  * for storing quad vertex data.
  */
 public class ModelQuad implements ModelQuadViewMutable {
@@ -15,6 +16,9 @@ public class ModelQuad implements ModelQuadViewMutable {
     private Sprite sprite;
     private int colorIdx;
     private int normal;
+    private int GFNINormX;
+    private int GFNINormY;
+    private int GFNINormZ;
 
     @Override
     public void setX(int idx, float x) {
@@ -119,5 +123,27 @@ public class ModelQuad implements ModelQuadViewMutable {
     @Override
     public int getNormal() {
         return this.normal;
+    }
+
+    @Override
+    public int getGFNINormX() {
+        return this.GFNINormX;
+    }
+
+    @Override
+    public int getGFNINormY() {
+        return this.GFNINormY;
+    }
+
+    @Override
+    public int getGFNINormZ() {
+        return this.GFNINormZ;
+    }
+
+    @Override
+    public void setGFNINormal(int x, int y, int z) {
+        this.GFNINormX = x;
+        this.GFNINormY = y;
+        this.GFNINormZ = z;
     }
 }

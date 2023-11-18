@@ -9,6 +9,10 @@ import java.util.Map;
 import java.util.Queue;
 import java.util.function.Consumer;
 
+/**
+ * The visible chunk collector is passed to the occlusion graph search culler to
+ * collect the visible chunks.
+ */
 public class VisibleChunkCollector implements Consumer<RenderSection> {
     private final SortedRenderLists.Builder sortedRenderLists;
     private final EnumMap<ChunkUpdateType, ArrayDeque<RenderSection>> sortedRebuildLists;
@@ -32,7 +36,7 @@ public class VisibleChunkCollector implements Consumer<RenderSection> {
     private void addToRebuildLists(RenderSection section) {
         ChunkUpdateType type = section.getPendingUpdate();
 
-        if (type != null && section.getBuildCancellationToken() == null) {
+        if (type != null && section.getTaskCancellationToken() == null) {
             Queue<RenderSection> queue = this.sortedRebuildLists.get(type);
 
             if (queue.size() < type.getMaximumQueueSize()) {

@@ -45,6 +45,25 @@ public class SodiumGameOptions {
         public boolean useFogOcclusion = true;
         public boolean useBlockFaceCulling = true;
         public boolean useNoErrorGLContext = true;
+
+        public SortBehavior sortBehavior = SortBehavior.DYNAMIC;
+    }
+
+    public enum SortBehavior implements TextProvider {
+        OFF("options.off"),
+        STATIC("options.clouds.fast"),
+        DYNAMIC("options.clouds.fancy");
+
+        private final Text name;
+
+        SortBehavior(String name) {
+            this.name = Text.translatable(name);
+        }
+
+        @Override
+        public Text getLocalizedName() {
+            return this.name;
+        }
     }
 
     public static class AdvancedSettings {
