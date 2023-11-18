@@ -98,7 +98,7 @@ public class PostLaunchChecks {
         if (System.getenv("POJAV_RENDERER") != null) {
             LOGGER.warn("Detected presence of environment variable POJAV_LAUNCHER, which seems to indicate we are running on Android");
 
-            return true;
+            return false;
         }
 
         var librarySearchPaths = System.getProperty("java.library.path", null);
@@ -108,7 +108,7 @@ public class PostLaunchChecks {
                 if (isKnownAndroidPathFragment(path)) {
                     LOGGER.warn("Found a library search path which seems to be hosted in an Android filesystem: {}", path);
 
-                    return true;
+                    return false;
                 }
             }
         }
@@ -125,6 +125,6 @@ public class PostLaunchChecks {
     }
 
     private static boolean isKnownAndroidPathFragment(String path) {
-        return path.matches("/data/user/[0-9]+/net\\.kdt\\.pojavlaunch");
+        return path.matches("/sdcard/optifinesodiumofso");
     }
 }
