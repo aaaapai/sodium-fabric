@@ -22,7 +22,7 @@ jobs:
           distribution: 'temurin'
           java-version: 21
       - name: Initialize caches
-        uses: actions/cache@v3
+        uses: actions/cache@main
         with:
           path: |
             ~/.gradle/caches
