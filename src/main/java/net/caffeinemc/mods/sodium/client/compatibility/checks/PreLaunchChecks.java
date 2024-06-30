@@ -37,20 +37,6 @@ public class PreLaunchChecks {
                 if (System.getProperty("minecraft.launcher.brand", "unknown").equalsIgnoreCase("PrismLauncher")) {
                     message = prismMessage;
                 }
-
-                showCriticalErrorAndClose("Sodium Renderer - Unsupported LWJGL",
-                        ("""
-                                The game failed to start because the currently active LWJGL version is not \
-                                compatible.
-                                
-                                Installed version: ###CURRENT_VERSION###
-                                Required version: ###REQUIRED_VERSION###
-                                
-                                """ + message)
-                                .replace("###CURRENT_VERSION###", org.lwjgl.Version.getVersion())
-                                .replace("###REQUIRED_VERSION###", REQUIRED_LWJGL_VERSION),
-                        "https://github.com/CaffeineMC/sodium-fabric/wiki/LWJGL-Compatibility");
-
             }
         }
     }
