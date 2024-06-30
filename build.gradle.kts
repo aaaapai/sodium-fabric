@@ -13,7 +13,7 @@ plugins {
     // This prevents a lot of issues where the build script can fail randomly because the Fabric Maven server
     // is not reachable for some reason, and it makes builds much more reproducible. Observation also shows that it
     // really helps to improve startup times on slow connections.
-    id("fabric-loom") version "1.7"
+    id("fabric-loom") version "1.7.1"
 }
 
 base {
