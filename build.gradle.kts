@@ -2,7 +2,7 @@ object Constants {
     // https://fabricmc.net/develop/
     const val MINECRAFT_VERSION: String = "1.21"
     const val FABRIC_LOADER_VERSION: String = "0.15.11"
-    const val FABRIC_API_VERSION: String = "0.100.3+1.21"
+    const val FABRIC_API_VERSION: String = "0.100.4+1.21"
 
     // https://semver.org/
     const val MOD_VERSION: String = "0.6.0"
@@ -13,7 +13,7 @@ plugins {
     // This prevents a lot of issues where the build script can fail randomly because the Fabric Maven server
     // is not reachable for some reason, and it makes builds much more reproducible. Observation also shows that it
     // really helps to improve startup times on slow connections.
-    id("fabric-loom") version "1.6.5"
+    id("fabric-loom") version "1.7"
 }
 
 base {
@@ -84,8 +84,8 @@ dependencies {
 
 tasks {
     getByName<JavaCompile>("compileDesktopJava") {
-        sourceCompatibility = JavaVersion.VERSION_1_8.toString()
-        targetCompatibility = JavaVersion.VERSION_1_8.toString()
+        sourceCompatibility = JavaVersion.VERSION_17.toString()
+        targetCompatibility = JavaVersion.VERSION_17.toString()
     }
 
     jar {
