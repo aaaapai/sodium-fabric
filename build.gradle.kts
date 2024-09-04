@@ -3,10 +3,10 @@ plugins {
     id("fabric-loom") version ("1.7.3") apply (false)
 }
 
-val MINECRAFT_VERSION by extra { "1.21" }
+val MINECRAFT_VERSION by extra { "24w35a" }
 val NEOFORGE_VERSION by extra { "21.0.163" }
-val FABRIC_LOADER_VERSION by extra { "0.16.0" }
-val FABRIC_API_VERSION by extra { "0.101.0+1.21" }
+val FABRIC_LOADER_VERSION by extra { "0.16.4" }
+val FABRIC_API_VERSION by extra { "0.103.1+1.21.2" }
 
 // This value can be set to null to disable Parchment.
 val PARCHMENT_VERSION by extra { "2024.07.28" }
