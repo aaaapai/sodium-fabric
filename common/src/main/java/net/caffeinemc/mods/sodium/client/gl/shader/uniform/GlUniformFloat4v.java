@@ -21,4 +21,8 @@ public class GlUniformFloat4v extends GlUniform<float[]> {
         }
         
     }
+
+    public void set(float x, float y, float z, float w) {
+        GL30C.glUniform4f(this.index, x, y, z, w);
+    }
 }
