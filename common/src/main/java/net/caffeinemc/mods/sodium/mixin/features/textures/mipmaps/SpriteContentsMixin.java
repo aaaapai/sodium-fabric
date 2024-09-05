@@ -15,7 +15,6 @@ import net.caffeinemc.mods.sodium.client.util.NativeImageHelper;
 import net.caffeinemc.mods.sodium.client.util.color.ColorSRGB;
 import net.minecraft.client.renderer.texture.SpriteContents;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.FastColor;
 import org.lwjgl.system.MemoryUtil;
 import org.objectweb.asm.Opcodes;
 import org.spongepowered.asm.mixin.*;
