@@ -2,7 +2,7 @@
 # This makes use of caching for faster builds and uploads the resulting artifacts
 name: build-commit
 
-on: [ push ]
+on: [ workflow_dispatch ]
 
 jobs:
   build:
@@ -15,26 +15,20 @@ jobs:
         run: ref="${GITHUB_REF#refs/heads/}" && echo "branch=${ref////-}" >> $GITHUB_OUTPUT
         id: ref
       - name: Checkout sources
-        uses: actions/checkout@v3
+        uses: actions/checkout@main
       - name: Set up JDK
-        uses: actions/setup-java@v2
+        uses: actions/setup-java@main
         with:
           distribution: 'temurin'
           java-version: 21
-      - name: Initialize caches
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.gradle/caches
-            ~/.gradle/loom-cache
-            ~/.gradle/wrapper
-          key: ${{ runner.os }}-build-commit-${{ hashFiles('gradle/wrapper/gradle-wrapper.properties') }}
-          restore-keys: |
-            ${{ runner.os }}-build-commit-
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@main
+        with: 
+            cache-read-only: false
       - name: Build artifacts
         run: ./gradlew build
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@main
         with:
           name: sodium-artifacts-${{ steps.ref.outputs.branch }}
           path: |
