@@ -6,7 +6,7 @@ plugins {
 
 val MINECRAFT_VERSION by extra { "1.20.1" }
 val NEOFORGE_VERSION by extra { "47.2.32" }
-val FABRIC_LOADER_VERSION by extra { "0.15.11" }
+val FABRIC_LOADER_VERSION by extra { "0.16.4" }
 val FABRIC_API_VERSION by extra { "0.92.2+1.20.1" }
 
 // https://semver.org/
@@ -24,7 +24,7 @@ tasks.withType<JavaCompile> {
 subprojects {
     apply(plugin = "maven-publish")
 
-    java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+    java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 
     fun createVersionString(): String {
@@ -64,7 +64,7 @@ subprojects {
 
     tasks.withType<JavaCompile> {
         options.encoding = "UTF-8"
-        options.release.set(17)
+        options.release.set(21)
     }
 
     // Disables Gradle's custom module metadata from being published to maven. The
