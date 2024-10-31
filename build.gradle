@@ -13,6 +13,14 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
 }
 
+loom {
+    mixin {
+        defaultRefmapName = "sodium.refmap.json"
+        useLegacyMixinAp = false
+    }
+    accessWidenerPath = file("src/main/resources/sodium.accesswidener")
+}
+
 processResources {
     inputs.property "version", project.version
 
