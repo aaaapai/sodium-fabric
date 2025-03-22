@@ -62,8 +62,7 @@ dependencies {
 
     addDependentFabricModule("fabric-api-base")
     addDependentFabricModule("fabric-block-view-api-v2")
-    //addDependentFabricModule("fabric-renderer-api-v1")
-    modCompileOnly(files(rootDir.resolve("libs").resolve("fabric-rendering-v1-11.1.10+081cc04301.jar")))
+    addDependentFabricModule("fabric-renderer-api-v1")
     addDependentFabricModule("fabric-rendering-data-attachment-v1")
 
     // We need to be careful during pre-launch that we don't touch any Minecraft classes, since other mods
