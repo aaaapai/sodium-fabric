@@ -54,7 +54,7 @@ dependencies {
     addEmbeddedFabricModule("fabric-api-base")
     addEmbeddedFabricModule("fabric-block-view-api-v2")
     //addDependentFabricModule("fabric-renderer-api-v1")
-    addDependentFabricModule(fileTree(mapOf("dir" to "libs", "include" to listOf("*"))))
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*"))))
     addEmbeddedFabricModule("fabric-rendering-data-attachment-v1")
     addEmbeddedFabricModule("fabric-rendering-fluids-v1")
     addEmbeddedFabricModule("fabric-resource-loader-v0")
