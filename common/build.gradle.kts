@@ -62,8 +62,7 @@ dependencies {
 
     addDependentFabricModule("fabric-api-base")
     addDependentFabricModule("fabric-block-view-api-v2")
-    // addDependentFabricModule("fabric-renderer-api-v1")
-    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*"))))
+    addDependentFabricModule("fabric-rendering-v1")
     addDependentFabricModule("fabric-rendering-data-attachment-v1")
 
     // We need to be careful during pre-launch that we don't touch any Minecraft classes, since other mods
