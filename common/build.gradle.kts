@@ -63,15 +63,15 @@ dependencies {
     addDependentFabricModule("fabric-api-base")
     addDependentFabricModule("fabric-block-view-api-v2")
     //addDependentFabricModule("fabric-renderer-api-v1")
-    modCompileOnly(files(rootDir.resolve("libs").resolve("fabric-renderer-api-v1-5.0.6+local.jar")))
+    modCompileOnly(files(rootDir.resolve("libs").resolve("fabric-rendering-v1-11.1.10+081cc04301.jar")))
     addDependentFabricModule("fabric-rendering-data-attachment-v1")
 
     // We need to be careful during pre-launch that we don't touch any Minecraft classes, since other mods
     // will not yet have an opportunity to apply transformations.
     configurationPreLaunch("org.lwjgl:lwjgl:3.3.3")
     configurationPreLaunch("org.lwjgl:lwjgl-opengl:3.3.3")
-    configurationPreLaunch("net.java.dev.jna:jna:5.14.0")
-    configurationPreLaunch("net.java.dev.jna:jna-platform:5.14.0")
+    configurationPreLaunch("net.java.dev.jna:jna:5.15.0")
+    configurationPreLaunch("net.java.dev.jna:jna-platform:5.15.0")
     configurationPreLaunch("org.slf4j:slf4j-api:2.0.9")
     configurationPreLaunch("org.jetbrains:annotations:25.0.0")
 }
