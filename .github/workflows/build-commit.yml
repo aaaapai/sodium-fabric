@@ -2,7 +2,7 @@
 # This makes use of caching for faster builds and uploads the resulting artifacts
 name: build-commit
 
-on: [ push ]
+on: [ workflow_dispatch ]
 
 jobs:
   build:
